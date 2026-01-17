@@ -4,7 +4,6 @@ import {
   getAuth, 
   onAuthStateChanged, 
   signInAnonymously, 
-  signInWithCustomToken,
   signOut 
 } from 'firebase/auth';
 import { 
@@ -18,13 +17,11 @@ import {
   updateDoc, 
   serverTimestamp,
   query,
-  where,
-  orderBy,
-  limit
+  where
 } from 'firebase/firestore';
 import { 
   Heart, Send, User, Search, LogOut, MessageCircle, 
-  UserPlus, Clock, CheckCircle, XCircle, Lock, ShieldCheck 
+  UserPlus, Clock, Lock, ShieldCheck 
 } from 'lucide-react';
 
 // --- Firebase Configuration (Fixed for Vite/Vercel) ---
@@ -96,7 +93,8 @@ export default function App() {
   };
 
   const fetchPartnerProfile = async (pId) => {
-    const pSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', pId));
+    const pRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', pId);
+    const pSnap = await getDoc(pRef);
     if (pSnap.exists()) setPartner(pSnap.data());
   };
 
@@ -114,7 +112,7 @@ export default function App() {
 
       <main className="pt-24 pb-24 max-w-lg mx-auto px-4">
         {view === 'profile' && <ProfileView profile={profile} partner={partner} connection={connection} onNavigate={setView} />}
-        {view === 'search' && <SearchView user={user} profile={profile} connection={connection} onBack={() => setView('profile')} />}
+        {view === 'search' && <SearchView user={user} profile={profile} onBack={() => setView('profile')} />}
         {view === 'chat' && <ChatView user={user} partner={partner} connection={connection} />}
       </main>
 
@@ -128,7 +126,6 @@ export default function App() {
   );
 }
 
-// --- Sub-components (Keep existing UI logic but ensure tailwind classes are clean) ---
 function NavButton({ active, icon, label, onClick }) {
   return (
     <button onClick={onClick} className={`flex flex-col items-center p-2 transition-colors ${active ? 'text-pink-500' : 'text-slate-500'}`}>
@@ -146,4 +143,4 @@ function LoadingScreen() {
   );
 }
 
-// Note: Include ProfileView, SearchView, and ChatView from previous version here.
+// Yahan apne baaki views (ProfileView, SearchView, ChatView) add kar le jo maine pehle diye the.

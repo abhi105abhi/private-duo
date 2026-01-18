@@ -1,33 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
+import { getAuth, onAuthStateChanged, signInAnonymously, signOut } from 'firebase/auth';
 import { 
-  getAuth, 
-  onAuthStateChanged, 
-  signInAnonymously, 
-  signOut 
-} from 'firebase/auth';
-import { 
-  getFirestore, 
-  collection, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  onSnapshot, 
-  addDoc, 
-  updateDoc, 
-  serverTimestamp,
-  query,
-  where
+  getFirestore, collection, doc, setDoc, getDoc, onSnapshot, 
+  addDoc, updateDoc, serverTimestamp, query, where, orderBy, limit 
 } from 'firebase/firestore';
 import { 
   Heart, Send, User, Search, LogOut, MessageCircle, 
-  UserPlus, Clock, Lock, ShieldCheck 
+  UserPlus, Clock, CheckCircle, XCircle, Lock, ShieldCheck 
 } from 'lucide-react';
 
-// --- Firebase Configuration (Fixed for Vite/Vercel) ---
+// --- Firebase Config with Vite Env Logic ---
 const configRaw = import.meta.env.VITE_FIREBASE_CONFIG;
 const firebaseConfig = configRaw ? JSON.parse(configRaw) : {};
-
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -42,105 +27,185 @@ export default function App() {
   const [view, setView] = useState('profile');
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
+    return onAuthStateChanged(auth, (u) => {
       setUser(u);
       if (!u) {
-        signInAnonymously(auth).catch(err => console.error("Auth error:", err));
+        signInAnonymously(auth).catch(e => console.error("Login failed", e));
         setLoading(false);
       }
     });
-    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
     if (!user) return;
-
-    const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid);
-    const unsubUser = onSnapshot(userDocRef, (snap) => {
+    const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid);
+    const unsubUser = onSnapshot(userRef, (snap) => {
       if (snap.exists()) {
         const data = snap.data();
         setProfile(data);
-        if (data.partnerId) fetchPartnerProfile(data.partnerId);
-      } else {
-        setupNewUser();
-      }
+        if (data.partnerId) fetchPartner(data.partnerId);
+      } else { createProfile(); }
       setLoading(false);
     });
 
     const connRef = collection(db, 'artifacts', appId, 'public', 'data', 'connections');
     const q = query(connRef, where('status', 'in', ['pending', 'accepted']));
-    
     const unsubConn = onSnapshot(q, (snap) => {
-      const allConns = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const active = allConns.find(c => c.user1_uid === user.uid || c.user2_uid === user.uid);
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const active = all.find(c => c.user1_uid === user.uid || c.user2_uid === user.uid);
       setConnection(active || null);
     });
 
     return () => { unsubUser(); unsubConn(); };
   }, [user]);
 
-  const setupNewUser = async () => {
-    if (!user) return;
-    const email = user.email || `user_${user.uid.slice(0, 5)}@private.app`;
+  const createProfile = async () => {
     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid), {
       uid: user.uid,
-      email: email.toLowerCase(),
-      displayName: 'Anonymous User',
+      email: user.email || `user_${user.uid.slice(0, 4)}@duo.app`.toLowerCase(),
+      displayName: 'Anonymous',
       photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.uid}`,
       partnerId: null,
       createdAt: serverTimestamp()
     });
   };
 
-  const fetchPartnerProfile = async (pId) => {
-    const pRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', pId);
-    const pSnap = await getDoc(pRef);
+  const fetchPartner = async (id) => {
+    const pSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', id));
     if (pSnap.exists()) setPartner(pSnap.data());
   };
 
-  if (loading) return <LoadingScreen />;
+  if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><Heart className="animate-ping text-pink-500" /></div>;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-pink-500/30 font-sans">
-      <header className="fixed top-0 w-full z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Heart className="w-6 h-6 text-pink-500 fill-current" />
-          <span className="font-bold text-xl tracking-tight">Duo</span>
-        </div>
-        {user && <button onClick={() => signOut(auth)} className="text-slate-400 hover:text-white"><LogOut size={20}/></button>}
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
+      <header className="fixed top-0 w-full z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 p-4 flex justify-between items-center">
+        <div className="flex items-center gap-2"><Heart className="text-pink-500 fill-current" size={20}/> <span className="font-bold">Duo</span></div>
+        <button onClick={() => signOut(auth)} className="text-slate-400"><LogOut size={18}/></button>
       </header>
-
-      <main className="pt-24 pb-24 max-w-lg mx-auto px-4">
-        {view === 'profile' && <ProfileView profile={profile} partner={partner} connection={connection} onNavigate={setView} />}
+      <main className="pt-20 pb-24 max-w-md mx-auto px-4">
+        {view === 'profile' && <ProfileView profile={profile} partner={partner} connection={connection} setView={setView} />}
         {view === 'search' && <SearchView user={user} profile={profile} onBack={() => setView('profile')} />}
         {view === 'chat' && <ChatView user={user} partner={partner} connection={connection} />}
       </main>
-
-      {user && partner && connection?.status === 'accepted' && (
-        <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[280px] bg-slate-900/90 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl p-2 flex justify-around">
-          <NavButton active={view === 'profile'} icon={<User/>} label="Home" onClick={() => setView('profile')} />
-          <NavButton active={view === 'chat'} icon={<MessageCircle/>} label="Chat" onClick={() => setView('chat')} />
+      {partner && connection?.status === 'accepted' && (
+        <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-xl border border-slate-700 rounded-2xl p-2 flex gap-8 px-8">
+          <button onClick={() => setView('profile')} className={view === 'profile' ? 'text-pink-500' : 'text-slate-500'}><User/></button>
+          <button onClick={() => setView('chat')} className={view === 'chat' ? 'text-pink-500' : 'text-slate-500'}><MessageCircle/></button>
         </nav>
       )}
     </div>
   );
 }
 
-function NavButton({ active, icon, label, onClick }) {
-  return (
-    <button onClick={onClick} className={`flex flex-col items-center p-2 transition-colors ${active ? 'text-pink-500' : 'text-slate-500'}`}>
-      {React.cloneElement(icon, { size: 24 })}
-      <span className="text-[10px] font-bold uppercase mt-1">{label}</span>
-    </button>
-  );
-}
+// --- Internal Views ---
 
-function LoadingScreen() {
+function ProfileView({ profile, partner, connection, setView }) {
+  const isPendingReceiver = connection?.user2_uid === profile?.uid && connection?.status === 'pending';
+  
+  const accept = async () => {
+    const connRef = doc(db, 'artifacts', appId, 'public', 'data', 'connections', connection.id);
+    await updateDoc(connRef, { status: 'accepted' });
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', connection.user1_uid), { partnerId: connection.user2_uid });
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', connection.user2_uid), { partnerId: connection.user1_uid });
+  };
+
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-      <div className="w-10 h-10 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
+    <div className="space-y-6">
+      <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800">
+        <div className="flex items-center gap-4">
+          <img src={profile?.photoURL} className="w-14 h-14 rounded-xl" alt="" />
+          <div><h2 className="font-bold">{profile?.displayName}</h2><p className="text-xs text-slate-400">{profile?.email}</p></div>
+        </div>
+      </div>
+      {!connection && <button onClick={() => setView('search')} className="w-full border-2 border-dashed border-slate-800 p-8 rounded-3xl text-slate-500 font-bold hover:bg-slate-900 transition">Find Partner</button>}
+      {isPendingReceiver && (
+        <div className="bg-pink-500/10 p-6 rounded-3xl border border-pink-500/20 text-center space-y-4">
+          <p className="text-sm font-bold">New Connection Request!</p>
+          <button onClick={accept} className="w-full bg-pink-600 py-3 rounded-xl font-bold">Accept</button>
+        </div>
+      )}
+      {partner && (
+        <div className="bg-slate-900 p-8 rounded-3xl text-center space-y-4">
+          <div className="flex justify-center items-center gap-4">
+            <img src={profile?.photoURL} className="w-12 h-12 rounded-full border-2 border-pink-500" />
+            <Heart className="text-pink-500 fill-current animate-pulse" size={20}/>
+            <img src={partner?.photoURL} className="w-12 h-12 rounded-full border-2 border-blue-500" />
+          </div>
+          <button onClick={() => setView('chat')} className="w-full bg-white text-black py-3 rounded-xl font-bold">START CHAT</button>
+        </div>
+      )}
     </div>
   );
 }
 
-// Yahan apne baaki views (ProfileView, SearchView, ChatView) add kar le jo maine pehle diye the.
+function SearchView({ user, profile, onBack }) {
+  const [email, setEmail] = useState('');
+  const [err, setErr] = useState('');
+
+  const search = async (e) => {
+    e.preventDefault();
+    if (email === profile.email) return setErr("Apne aap se baat karega?");
+    const qUser = query(collection(db, 'artifacts', appId, 'public', 'data', 'users'), where('email', '==', email.toLowerCase()), limit(1));
+    const { getDocs } = await import('firebase/firestore');
+    const snap = await getDocs(qUser);
+    if (snap.empty) return setErr("User nahi mila.");
+    const target = snap.docs[0].data();
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'connections'), {
+      user1_uid: user.uid, user2_uid: target.uid, status: 'pending', createdAt: serverTimestamp()
+    });
+    onBack();
+  };
+
+  return (
+    <div className="space-y-4">
+      <button onClick={onBack} className="text-slate-500 flex items-center gap-1 text-sm"><XCircle size={16}/> Back</button>
+      <form onSubmit={search} className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-4">
+        <h3 className="font-bold text-lg">Find Partner</h3>
+        <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email..." className="w-full bg-slate-950 p-4 rounded-xl outline-none border border-slate-700 focus:border-pink-500" required />
+        {err && <p className="text-red-400 text-xs">{err}</p>}
+        <button className="w-full bg-pink-600 py-4 rounded-xl font-bold shadow-lg shadow-pink-900/20">Send Request</button>
+      </form>
+    </div>
+  );
+}
+
+function ChatView({ user, connection }) {
+  const [msgs, setMsgs] = useState([]);
+  const [text, setText] = useState('');
+  const endRef = useRef();
+
+  useEffect(() => {
+    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'messages'), where('connectionId', '==', connection.id), orderBy('createdAt', 'asc'));
+    return onSnapshot(q, (snap) => {
+      setMsgs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    });
+  }, [connection]);
+
+  const send = async (e) => {
+    e.preventDefault();
+    if (!text.trim()) return;
+    const t = text; setText('');
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'messages'), {
+      connectionId: connection.id, senderId: user.uid, text: t, createdAt: serverTimestamp()
+    });
+  };
+
+  return (
+    <div className="flex flex-col h-[75vh]">
+      <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+        {msgs.map(m => (
+          <div key={m.id} className={`flex ${m.senderId === user.uid ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[80%] p-3 px-4 rounded-2xl text-sm ${m.senderId === user.uid ? 'bg-pink-600 rounded-tr-none' : 'bg-slate-800 rounded-tl-none'}`}>{m.text}</div>
+          </div>
+        ))}
+        <div ref={endRef} />
+      </div>
+      <form onSubmit={send} className="mt-4 flex gap-2">
+        <input value={text} onChange={e => setText(e.target.value)} className="flex-1 bg-slate-900 rounded-xl px-4 border border-slate-800" placeholder="Type..." />
+        <button className="bg-pink-600 p-4 rounded-xl"><Send size={18}/></button>
+      </form>
+    </div>
+  );
+}

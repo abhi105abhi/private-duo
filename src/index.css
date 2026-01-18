@@ -6,3 +6,7 @@ body {
   margin: 0;
   -webkit-font-smoothing: antialiased;
 }
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%; /* Chrome 54+, Edge 79+ support ke liye */
+}

@@ -1,18 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInAnonymously, signOut } from 'firebase/auth';
-import { 
-  getFirestore, collection, doc, setDoc, getDoc, onSnapshot, 
-  addDoc, updateDoc, serverTimestamp, query, where, orderBy, limit 
-} from 'firebase/firestore';
-import { 
-  Heart, Send, User, Search, LogOut, MessageCircle, 
-  UserPlus, Clock, CheckCircle, XCircle, Lock, ShieldCheck 
-} from 'lucide-react';
+import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, addDoc, updateDoc, serverTimestamp, query, where, orderBy } from 'firebase/firestore';
+import { Heart, Send, User, MessageCircle, LogOut, UserPlus, Search, XCircle, CheckCircle } from 'lucide-react';
 
-// --- Firebase Config with Vite Env Logic ---
-const configRaw = import.meta.env.VITE_FIREBASE_CONFIG;
-const firebaseConfig = configRaw ? JSON.parse(configRaw) : {};
+// Firebase Logic - Fixed for Vercel
+const rawConfig = import.meta.env.VITE_FIREBASE_CONFIG;
+const firebaseConfig = rawConfig ? JSON.parse(rawConfig) : {};
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -23,14 +17,14 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [partner, setPartner] = useState(null);
   const [connection, setConnection] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [view, setView] = useState('profile');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
       setUser(u);
       if (!u) {
-        signInAnonymously(auth).catch(e => console.error("Login failed", e));
+        signInAnonymously(auth).catch(console.error);
         setLoading(false);
       }
     });
@@ -62,7 +56,7 @@ export default function App() {
   const createProfile = async () => {
     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid), {
       uid: user.uid,
-      email: user.email || `user_${user.uid.slice(0, 4)}@duo.app`.toLowerCase(),
+      email: user.email || `user_${user.uid.slice(0,4)}@duo.app`.toLowerCase(),
       displayName: 'Anonymous',
       photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.uid}`,
       partnerId: null,
@@ -75,21 +69,23 @@ export default function App() {
     if (pSnap.exists()) setPartner(pSnap.data());
   };
 
-  if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><Heart className="animate-ping text-pink-500" /></div>;
+  if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-pink-500 font-bold">Connecting...</div>;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
-      <header className="fixed top-0 w-full z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 p-4 flex justify-between items-center">
-        <div className="flex items-center gap-2"><Heart className="text-pink-500 fill-current" size={20}/> <span className="font-bold">Duo</span></div>
-        <button onClick={() => signOut(auth)} className="text-slate-400"><LogOut size={18}/></button>
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+      <header className="p-4 bg-slate-900/50 backdrop-blur-md border-b border-slate-800 flex justify-between items-center fixed top-0 w-full z-10">
+        <div className="flex items-center gap-2 font-bold text-lg text-pink-500"><Heart className="fill-current" size={20}/> Duo</div>
+        <button onClick={() => signOut(auth)} className="text-slate-500"><LogOut size={20}/></button>
       </header>
-      <main className="pt-20 pb-24 max-w-md mx-auto px-4">
+
+      <main className="flex-1 pt-20 px-4 max-w-md mx-auto w-full pb-24">
         {view === 'profile' && <ProfileView profile={profile} partner={partner} connection={connection} setView={setView} />}
         {view === 'search' && <SearchView user={user} profile={profile} onBack={() => setView('profile')} />}
-        {view === 'chat' && <ChatView user={user} partner={partner} connection={connection} />}
+        {view === 'chat' && <ChatView user={user} connection={connection} partner={partner} />}
       </main>
+
       {partner && connection?.status === 'accepted' && (
-        <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-xl border border-slate-700 rounded-2xl p-2 flex gap-8 px-8">
+        <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 border border-slate-800 rounded-2xl flex gap-10 px-8 py-3 shadow-2xl">
           <button onClick={() => setView('profile')} className={view === 'profile' ? 'text-pink-500' : 'text-slate-500'}><User/></button>
           <button onClick={() => setView('chat')} className={view === 'chat' ? 'text-pink-500' : 'text-slate-500'}><MessageCircle/></button>
         </nav>
@@ -98,6 +94,7 @@ export default function App() {
   );
 }
 
+// Sub-components: ProfileView, SearchView, ChatView (as provided previously)
 // --- Internal Views ---
 
 function ProfileView({ profile, partner, connection, setView }) {
@@ -209,3 +206,4 @@ function ChatView({ user, connection }) {
     </div>
   );
 }
+
